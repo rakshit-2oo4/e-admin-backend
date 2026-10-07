@@ -1,8 +1,0 @@
-﻿{
-  "name": "Acme Corp",
-  "slug": "acme-corp",
-  "plan": "enterprise",
-  "ownerEmail": "owner@acme.com",
-  "ownerPassword": "SecurePassword123!",
-  "ownerName": "Alice Acme"
-}

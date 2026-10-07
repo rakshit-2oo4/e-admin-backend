@@ -114,4 +114,27 @@ export class PlatformUsersService {
     });
     return { changed: true };
   }
+
+  async adminResetPassword(id: string, newPassword: string, actor: PlatformUser, meta: RequestMeta) {
+    const passwordHash = await this.passwords.hash(newPassword);
+    return this.dataSource.transaction(async (m) => {
+      const target = await m.findOne(PlatformUser, { where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!target) throw new PlatformError(404, 'PLATFORM_USER_NOT_FOUND');
+      target.passwordHash = passwordHash;
+      target.failedLoginCount = 0;
+      target.lockedUntil = null;
+      await m.save(target);
+      await this.tokens.revokeAllForUser(m, target.id);
+      await this.audit.log(m, {
+        platformUserId: actor.id,
+        action: 'PLATFORM_USER_PASSWORD_RESET',
+        entityType: 'PlatformUser',
+        entityId: target.id,
+        diff: { note: 'Admin password reset' },
+        ...meta,
+      });
+      return toPublicUser(target);
+    });
+  }
 }
+

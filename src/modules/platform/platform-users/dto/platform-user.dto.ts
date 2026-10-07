@@ -38,3 +38,9 @@ export class ChangePasswordDto {
   @IsString() @MinLength(12) @MaxLength(128)
   newPassword!: string;
 }
+
+export class AdminResetPasswordDto {
+  @IsString() @MinLength(12) @MaxLength(128)
+  newPassword!: string;
+}
+

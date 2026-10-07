@@ -7,7 +7,7 @@ import { PlatformRolesGuard } from '../common/platform-roles.guard';
 import { REFRESH_COOKIE } from '../common/platform.types';
 import type { RequestMeta } from '../common/platform.types';
 import { PlatformRole, PlatformUser } from '../entities/platform-user.entity';
-import { ChangePasswordDto, CreatePlatformUserDto, UpdatePlatformUserDto } from './dto/platform-user.dto';
+import { AdminResetPasswordDto, ChangePasswordDto, CreatePlatformUserDto, UpdatePlatformUserDto } from './dto/platform-user.dto';
 import { PlatformUsersService } from './platform-users.service';
 
 @Controller('platform/users')
@@ -35,6 +35,17 @@ export class PlatformUsersController {
     @ReqMeta() meta: RequestMeta,
   ) {
     return this.service.changeOwnPassword(user, dto, req.cookies?.[REFRESH_COOKIE] as string | undefined, meta);
+  }
+
+  @Post(':id/reset-password')
+  @PlatformRoles(PlatformRole.SUPER_ADMIN)
+  resetPassword(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminResetPasswordDto,
+    @CurrentPlatformUser() actor: PlatformUser,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.service.adminResetPassword(id, dto.newPassword, actor, meta);
   }
 
   @Patch(':id')

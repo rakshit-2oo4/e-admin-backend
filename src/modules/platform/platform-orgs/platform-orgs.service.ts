@@ -28,7 +28,7 @@ export class PlatformOrgsService {
     private readonly usage: PlatformUsageService,
     @InjectRepository(Organization) private readonly orgs: Repository<Organization>,
     @InjectRepository(User) private readonly users: Repository<User>,
-  ) {}
+  ) { }
 
   async list(q: ListOrgsQueryDto) {
     const qb = this.orgs.createQueryBuilder('o').withDeleted();
@@ -41,12 +41,49 @@ export class PlatformOrgsService {
     if (q.plan) qb.andWhere('o.plan = :plan', { plan: q.plan });
     if (q.search) qb.andWhere('(o.name ILIKE :s OR o.slug ILIKE :s)', { s: `%${q.search.replace(/[%_]/g, '\\$&')}%` });
 
-    const [items, total] = await qb
+    const [rawItems, total] = await qb
       .orderBy('o."createdAt"', 'DESC')
       .skip((q.page - 1) * q.limit)
       .take(q.limit)
       .getManyAndCount();
-    return { items, page: q.page, limit: q.limit, total };
+
+    const items = await Promise.all(
+      rawItems.map(async (org) => {
+        try {
+          const usage = await this.usage.getOrgUsage(org.id);
+          return {
+            ...org,
+            userCount: usage.userCount ?? 1,
+            attemptsTotal: usage.attemptsTotal ?? 0,
+            storageBytes: usage.storageBytes ?? 0,
+          };
+        } catch {
+          return {
+            ...org,
+            userCount: 1,
+            attemptsTotal: 0,
+            storageBytes: 0,
+          };
+        }
+      }),
+    );
+    const countsRaw = await this.orgs
+      .createQueryBuilder('o')
+      .withDeleted()
+      .select('COUNT(*) FILTER (WHERE o."deletedAt" IS NULL AND o."suspendedAt" IS NULL)', 'active')
+      .addSelect('COUNT(*) FILTER (WHERE o."deletedAt" IS NULL AND o."suspendedAt" IS NOT NULL)', 'suspended')
+      .addSelect('COUNT(*) FILTER (WHERE o."deletedAt" IS NOT NULL)', 'deleted')
+      .addSelect('COUNT(*)', 'total')
+      .getRawOne();
+
+    const counts = {
+      active: Number(countsRaw?.active ?? 0),
+      suspended: Number(countsRaw?.suspended ?? 0),
+      deleted: Number(countsRaw?.deleted ?? 0),
+      total: Number(countsRaw?.total ?? 0),
+    };
+
+    return { items, page: q.page, limit: q.limit, total, counts };
   }
 
   private async findOrThrow(id: string, withDeleted = false): Promise<Organization> {
