@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { PlatformError } from '../common/platform-error';
 import { PlatformAuditLog } from '../entities/platform-audit-log.entity';
+import { PlatformUser } from '../entities/platform-user.entity';
 import { AuditQueryDto } from './dto/audit-query.dto';
 
 @Injectable()
 export class PlatformAuditReadService {
-  constructor(@InjectRepository(PlatformAuditLog) private readonly logs: Repository<PlatformAuditLog>) {}
+  constructor(@InjectRepository(PlatformAuditLog) private readonly logs: Repository<PlatformAuditLog>) { }
 
   private decode(cursor: string): { c: string; i: string } {
     try {
@@ -39,6 +40,22 @@ export class PlatformAuditReadService {
       hasMore && last
         ? Buffer.from(JSON.stringify({ c: last.createdAt.toISOString(), i: last.id })).toString('base64url')
         : null;
-    return { items, nextCursor, limit: q.limit };
+
+    const userIds = [...new Set(items.map((r) => r.platformUserId).filter((id): id is string => Boolean(id)))];
+    let userMap = new Map<string, { id: string; name: string; email: string }>();
+    if (userIds.length > 0) {
+      const users = await this.logs.manager.getRepository(PlatformUser).find({
+        where: { id: In(userIds) },
+        select: { id: true, name: true, email: true },
+      });
+      userMap = new Map(users.map((u) => [u.id, { id: u.id, name: u.name, email: u.email }]));
+    }
+
+    const enriched = items.map((r) => ({
+      ...r,
+      actor: r.platformUserId ? userMap.get(r.platformUserId) ?? null : null,
+    }));
+
+    return { items: enriched, nextCursor, limit: q.limit };
   }
 }
