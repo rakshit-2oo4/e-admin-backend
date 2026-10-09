@@ -1,11 +1,12 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { PageQueryDto } from '../common/pagination.dto';
 import { PlatformAuthGuard } from '../common/platform-auth.guard';
 import { CurrentPlatformUser, PlatformRoles, ReqMeta } from '../common/platform-roles.decorator';
 import { PlatformRolesGuard } from '../common/platform-roles.guard';
 import type { RequestMeta } from '../common/platform.types';
 import { PlatformRole, PlatformUser } from '../entities/platform-user.entity';
-import { CreateOrgDto, ListOrgsQueryDto, SuspendOrgDto, UpdateOrgDto } from './dto/org.dto';
+import { CreateOrgDto, ExportOrgsQueryDto, ListOrgsQueryDto, SuspendOrgDto, UpdateOrgDto } from './dto/org.dto';
 import { PlatformOrgsService } from './platform-orgs.service';
 
 @Controller('platform/orgs')
@@ -17,6 +18,18 @@ export class PlatformOrgsController {
   list(@Query() q: ListOrgsQueryDto) {
     return this.service.list(q);
   }
+
+  @Get('export')
+  async export(
+    @Query() q: ExportOrgsQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { filename, csv } = await this.service.exportCsv(q);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return csv;
+  }
+
 
   @Post()
   @PlatformRoles(PlatformRole.SUPER_ADMIN)

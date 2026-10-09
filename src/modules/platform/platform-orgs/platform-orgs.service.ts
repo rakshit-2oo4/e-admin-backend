@@ -11,7 +11,8 @@ import { PlatformPasswordService } from '../common/platform-password.service';
 import { PlatformUsageService } from '../common/platform-usage.service';
 import { RequestMeta } from '../common/platform.types';
 import { PlatformUser } from '../entities/platform-user.entity';
-import { CreateOrgDto, ListOrgsQueryDto, OrgStatusFilter, SuspendOrgDto, UpdateOrgDto } from './dto/org.dto';
+import { toCsvString } from '../common/csv.util';
+import { CreateOrgDto, ExportOrgsQueryDto, ListOrgsQueryDto, OrgStatusFilter, SuspendOrgDto, UpdateOrgDto } from './dto/org.dto';
 
 const TRIAL_DAYS = 14;
 const DELETE_GRACE_DAYS = 30;
@@ -41,8 +42,13 @@ export class PlatformOrgsService {
     if (q.plan) qb.andWhere('o.plan = :plan', { plan: q.plan });
     if (q.search) qb.andWhere('(o.name ILIKE :s OR o.slug ILIKE :s)', { s: `%${q.search.replace(/[%_]/g, '\\$&')}%` });
 
+    if (q.sortBy?.toLowerCase() === 'oldest') {
+      qb.orderBy('o."createdAt"', 'ASC');
+    } else {
+      qb.orderBy('o."createdAt"', 'DESC');
+    }
+
     const [rawItems, total] = await qb
-      .orderBy('o."createdAt"', 'DESC')
       .skip((q.page - 1) * q.limit)
       .take(q.limit)
       .getManyAndCount();
@@ -84,6 +90,78 @@ export class PlatformOrgsService {
     };
 
     return { items, page: q.page, limit: q.limit, total, counts };
+  }
+
+  async exportCsv(q: ExportOrgsQueryDto): Promise<{ filename: string; csv: string }> {
+    const qb = this.orgs.createQueryBuilder('o').withDeleted();
+    const status = q.status ?? OrgStatusFilter.ACTIVE;
+
+    if (status === OrgStatusFilter.ACTIVE) qb.andWhere('o."deletedAt" IS NULL AND o."suspendedAt" IS NULL');
+    else if (status === OrgStatusFilter.SUSPENDED) qb.andWhere('o."deletedAt" IS NULL AND o."suspendedAt" IS NOT NULL');
+    else if (status === OrgStatusFilter.DELETED) qb.andWhere('o."deletedAt" IS NOT NULL');
+
+    if (q.plan && q.plan.toLowerCase() !== 'all') qb.andWhere('o.plan = :plan', { plan: q.plan.toLowerCase() });
+    if (q.search) qb.andWhere('(o.name ILIKE :s OR o.slug ILIKE :s)', { s: `%${q.search.replace(/[%_]/g, '\\$&')}%` });
+
+    if (q.sortBy?.toLowerCase() === 'oldest') {
+      qb.orderBy('o."createdAt"', 'ASC');
+    } else {
+      qb.orderBy('o."createdAt"', 'DESC');
+    }
+
+    const maxRows = q.limit ? Math.min(q.limit, 10000) : 5000;
+    const rawItems = await qb
+      .limit(maxRows)
+      .getMany();
+
+    const items = await Promise.all(
+      rawItems.map(async (org) => {
+        try {
+          const usage = await this.usage.getOrgUsage(org.id);
+          return {
+            ...org,
+            userCount: usage.userCount ?? 1,
+            attemptsTotal: usage.attemptsTotal ?? 0,
+            storageBytes: usage.storageBytes ?? 0,
+          };
+        } catch {
+          return {
+            ...org,
+            userCount: 1,
+            attemptsTotal: 0,
+            storageBytes: 0,
+          };
+        }
+      }),
+    );
+
+    const headers = ['Name', 'Slug', 'Plan', 'Users', 'Attempts', 'Storage', 'Created', 'Status'];
+    const rows = items.map((org) => {
+      const planStr = org.plan ? org.plan.charAt(0).toUpperCase() + org.plan.slice(1) : 'Trial';
+      const storageStr = org.storageBytes
+        ? org.storageBytes >= 1073741824
+          ? `${(org.storageBytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+          : `${(org.storageBytes / (1024 * 1024)).toFixed(1)} MB`
+        : '0 GB';
+      const createdStr = org.createdAt ? new Date(org.createdAt).toISOString().slice(0, 10) : '';
+      const statusStr = org.deletedAt ? 'Deleted' : org.suspendedAt ? 'Suspended' : 'Active';
+
+      return [
+        org.name,
+        org.slug,
+        planStr,
+        org.userCount,
+        org.attemptsTotal,
+        storageStr,
+        createdStr,
+        statusStr,
+      ];
+    });
+
+    const csv = toCsvString(headers, rows);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `organizations-${dateStr}.csv`;
+    return { filename, csv };
   }
 
   private async findOrThrow(id: string, withDeleted = false): Promise<Organization> {

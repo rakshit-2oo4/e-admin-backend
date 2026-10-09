@@ -64,4 +64,26 @@ export class ListOrgsQueryDto extends PageQueryDto {
 
   @IsOptional() @IsEnum(OrgStatusFilter)
   status?: OrgStatusFilter;
+
+  @IsOptional() @Transform(trimLower) @IsString() @MaxLength(40)
+  sortBy?: string;
 }
+
+export class ExportOrgsQueryDto {
+  @IsOptional() @Transform(trim) @IsString() @MaxLength(120)
+  search?: string;
+
+  @IsOptional() @Transform(trimLower) @IsString() @MaxLength(40)
+  plan?: string;
+
+  @IsOptional() @IsEnum(OrgStatusFilter)
+  status?: OrgStatusFilter;
+
+  @IsOptional() @Transform(trimLower) @IsString() @MaxLength(40)
+  sortBy?: string;
+
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000)
+  limit?: number;
+}
+
+
