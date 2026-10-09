@@ -11,6 +11,7 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   app.set('trust proxy', 1);
   app.use(cookieParser());
+  app.enableShutdownHooks();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   app.useGlobalInterceptors(new EnvelopeInterceptor());
   app.useGlobalFilters(new AllExceptionsFilter());

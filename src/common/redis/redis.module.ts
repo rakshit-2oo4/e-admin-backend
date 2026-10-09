@@ -1,4 +1,4 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, Inject, Logger, Module, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
@@ -10,9 +10,24 @@ export const REDIS = 'REDIS';
         {
             provide: REDIS,
             inject: [ConfigService],
-            useFactory: (c: ConfigService) => new Redis(c.getOrThrow<string>('redisUrl')),
+            useFactory: (c: ConfigService) => {
+                const log = new Logger('Redis');
+                const client = new Redis(c.getOrThrow<string>('redisUrl'), {
+                    maxRetriesPerRequest: 3,
+                    connectTimeout: 10_000,
+                });
+                client.on('ready', () => log.log('Connected'));
+                client.on('error', (e) => log.error(`Redis error: ${e.message}`));
+                return client;
+            },
         },
     ],
     exports: [REDIS],
 })
-export class RedisModule { }
+export class RedisModule implements OnApplicationShutdown {
+    constructor(@Inject(REDIS) private readonly redis: Redis) { }
+
+    async onApplicationShutdown() {
+        await this.redis.quit().catch(() => undefined);
+    }
+}
