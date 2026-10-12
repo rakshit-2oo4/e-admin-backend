@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { PlatformCoreModule } from '../common/platform-core.module';
-import { PlatformOrgsController } from './platform-orgs.controller';
+import { PlatformActivityController, PlatformOrgsController } from './platform-orgs.controller';
 import { PlatformOrgsService } from './platform-orgs.service';
 
 @Module({
   imports: [PlatformCoreModule],
-  controllers: [PlatformOrgsController],
+  controllers: [PlatformOrgsController, PlatformActivityController],
   providers: [PlatformOrgsService],
 })
-export class PlatformOrgsModule {}
+export class PlatformOrgsModule { }
