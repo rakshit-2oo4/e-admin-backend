@@ -341,4 +341,70 @@ export class PlatformOrgsService {
   getUsage(id: string) {
     return this.usage.getOrgUsage(id);
   }
+
+  async recent(limit = 5) {
+    const rows = await this.orgs.find({ order: { createdAt: 'DESC' }, take: limit });
+    return Promise.all(
+      rows.map(async (o) => {
+        let users = 0;
+        let attempts = 0;
+        try {
+          const u = await this.usage.getOrgUsage(o.id);
+          users = u.userCount ?? 0;
+          attempts = u.attemptsTotal ?? 0;
+        } catch { /* keep zeros */ }
+        return {
+          id: o.id,
+          name: o.name,
+          slug: o.slug,
+          plan: o.plan,
+          users,
+          attempts,
+          status: o.suspendedAt ? 'Suspended' : 'Active',
+        };
+      }),
+    );
+  }
+
+  async recentActivity(limit = 6) {
+    const rows = await this.dataSource
+      .createQueryBuilder()
+      .select('l.id', 'id')
+      .addSelect('l.action', 'action')
+      .addSelect('l.type', 'type')
+      .addSelect('l.diff', 'diff')
+      .addSelect('l."createdAt"', 'createdAt')
+      .addSelect('u.name', 'actorName')
+      .addSelect('o.name', 'orgName')
+      .from('platform_audit_logs', 'l')
+      .leftJoin('platform_users', 'u', 'u.id = l."platformUserId"')
+      .leftJoin('organizations', 'o', `o.id::text = l."entityId" AND l."entityType" = 'Organization'`)
+      .orderBy('l."createdAt"', 'DESC')
+      .limit(limit)
+      .getRawMany();
+
+    const labels: Record<string, string> = {
+      ORG_CREATED: 'Created org',
+      ORG_UPDATED: 'Updated org',
+      ORG_SUSPENDED: 'Suspended org',
+      ORG_UNSUSPENDED: 'Unsuspended org',
+      ORG_DELETED: 'Deleted org',
+    };
+
+    return rows.map((r) => {
+      const isSystem = r.type === 'SYSTEM';
+      const name = r.orgName ?? (r.diff as any)?.after?.name;
+      const label = labels[r.action] ?? r.action.toLowerCase().replace(/_/g, ' ').replace(/^\w/, (c: string) => c.toUpperCase());
+      const initials = isSystem
+        ? 'SYS'
+        : (r.actorName ?? '?').split(/\s+/).map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
+      return {
+        id: r.id,
+        type: isSystem ? 'system' : 'user',
+        initials,
+        title: `${isSystem ? 'system · ' : ''}${label}${name ? ` '${name}'` : ''}`,
+        createdAt: r.createdAt,
+      };
+    });
+  }
 }

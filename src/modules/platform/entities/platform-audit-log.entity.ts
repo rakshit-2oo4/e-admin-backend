@@ -6,6 +6,7 @@ export class PlatformAuditLog {
   @Index() @Column({ type: 'uuid', nullable: true }) platformUserId!: string | null;
   @Index() @Column() action!: string;
   @Index() @Column() entityType!: string;
+  @Index() @Column({ type: 'varchar', default: 'USER' }) type!: 'USER' | 'SYSTEM';
   @Column({ type: 'varchar', nullable: true }) entityId!: string | null;
   @Column({ type: 'jsonb', nullable: true }) diff!: Record<string, unknown> | null;
   @Column({ type: 'varchar', nullable: true }) ip!: string | null;
