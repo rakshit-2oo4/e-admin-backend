@@ -12,7 +12,7 @@ import { PlatformOrgsService } from './platform-orgs.service';
 @Controller('platform/orgs')
 @UseGuards(PlatformAuthGuard, PlatformRolesGuard)
 export class PlatformOrgsController {
-  constructor(private readonly service: PlatformOrgsService) {}
+  constructor(private readonly service: PlatformOrgsService) { }
 
   @Get()
   list(@Query() q: ListOrgsQueryDto) {
@@ -35,6 +35,11 @@ export class PlatformOrgsController {
   @PlatformRoles(PlatformRole.SUPER_ADMIN)
   create(@Body() dto: CreateOrgDto, @CurrentPlatformUser() actor: PlatformUser, @ReqMeta() meta: RequestMeta) {
     return this.service.create(dto, actor, meta);
+  }
+
+  @Get('recent')
+  recent() {
+    return this.service.recent(5);
   }
 
   @Get(':id')
@@ -86,5 +91,16 @@ export class PlatformOrgsController {
   @Get(':id/usage')
   usage(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.getUsage(id);
+  }
+}
+
+@Controller('platform/activity')
+@UseGuards(PlatformAuthGuard, PlatformRolesGuard)
+export class PlatformActivityController {
+  constructor(private readonly service: PlatformOrgsService) { }
+
+  @Get('recent')
+  recent() {
+    return this.service.recentActivity(6);
   }
 }

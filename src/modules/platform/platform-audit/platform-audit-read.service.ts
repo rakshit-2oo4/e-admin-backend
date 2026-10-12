@@ -49,7 +49,7 @@ export class PlatformAuditReadService {
 
     if (q.actor && q.actor !== 'All') {
       if (q.actor.toLowerCase() === 'system') {
-        qb.andWhere('a."platformUserId" IS NULL');
+        qb.andWhere('a.type = :sys', { sys: 'SYSTEM' });
       } else {
         const users = await this.logs.manager.getRepository(PlatformUser).find({
           where: [{ name: q.actor }, { email: q.actor }],
@@ -136,7 +136,7 @@ export class PlatformAuditReadService {
       order: { name: 'ASC' },
     });
 
-    const hasSystemLogs = await this.logs.findOne({ where: { platformUserId: IsNull() } });
+    const hasSystemLogs = await this.logs.findOne({ where: { type: 'SYSTEM' } });
 
     const actors = [
       ...(hasSystemLogs ? ['System'] : []),
@@ -191,7 +191,7 @@ export class PlatformAuditReadService {
 
     if (q.actor && q.actor !== 'All') {
       if (q.actor.toLowerCase() === 'system') {
-        qb.andWhere('a."platformUserId" IS NULL');
+        qb.andWhere('a.type = :sys', { sys: 'SYSTEM' });
       } else {
         const users = await this.logs.manager.getRepository(PlatformUser).find({
           where: [{ name: q.actor }, { email: q.actor }],
@@ -244,7 +244,7 @@ export class PlatformAuditReadService {
       userMap = new Map(users.map((u) => [u.id, { id: u.id, name: u.name, email: u.email }]));
     }
 
-    const headers = ['ID', 'Timestamp', 'Date', 'Action', 'Target', 'Actor', 'Outcome', 'IP', 'Diff'];
+    const headers = ['ID', 'Timestamp', 'Date', 'Type', 'Action', 'Target', 'Actor', 'Outcome', 'IP', 'Diff'];
     const csvRows = rows.map((r) => {
       const d = new Date(r.createdAt);
       const timeStr = !isNaN(d.getTime())
@@ -267,7 +267,7 @@ export class PlatformAuditReadService {
       }
 
       const u = r.platformUserId ? userMap.get(r.platformUserId) : null;
-      const actor = u?.name || u?.email || (r.platformUserId ? 'Platform Admin' : 'System');
+      const actor = r.type === 'SYSTEM' ? 'System' : u?.name || u?.email || 'Platform Admin';
 
       const isFail =
         r.action.toLowerCase().includes('fail') ||
@@ -282,6 +282,7 @@ export class PlatformAuditReadService {
         r.id,
         timeStr,
         dateKey,
+        r.type,
         r.action,
         target,
         actor,
